@@ -1,0 +1,156 @@
+---
+title: "Item types, inventory slots, and drop mechanics"
+description: "Kinoko's v95 item model: five inventory tabs, equipment scrolling and potential, Cash Shop locker, pet system, and configurable drop mechanics."
+---
+
+Kinoko supports the complete item and inventory model from MapleStory v95. Items are classified by type into one of five inventory tabs, each with its own slot limit. Equipment carries stat data and supports scrolling, enhancement, and potential tiers. The Cash Shop provides a separate locker for NX-purchased items, and up to three pets can be active simultaneously per character.
+
+## Inventory types
+
+Every item belongs to exactly one inventory type, determined by its item ID prefix:
+
+| Type | Value | Item ID prefix | Contents |
+|---|---|---|---|
+| `EQUIP` | 1 | 1xxxxxx | Weapons, armor, accessories, and all wearable gear |
+| `CONSUME` | 2 | 2xxxxxx | Potions, scrolls, teleport rocks, skill books, and usable items |
+| `INSTALL` | 3 | 3xxxxxx | Furniture and deployable objects |
+| `ETC` | 4 | 4xxxxxx | Quest items, crafting materials, and miscellaneous drops |
+| `CASH` | 5 | 5xxxxxx | NX-purchased cosmetics, pets, and Cash Shop items |
+
+An internal `EQUIPPED` (value 0) type is used to represent the set of items currently worn in equipment slots — it is not a real inventory tab but is used in `InventoryType.getByPosition` when a slot position is negative (indicating an equipped position).
+
+`InventoryType.getByItemId` automatically resolves the correct type from any item ID.
+
+## Inventory slot limits
+
+<AccordionGroup>
+  <Accordion title="Character inventory">
+    Each of the five inventory tabs has a configurable starting size and a hard maximum:
+
+    | Constant | Value | Description |
+    |---|---|---|
+    | `INVENTORY_BASE_SLOTS` | 24 (default) | Starting slot count per inventory tab |
+    | `INVENTORY_SLOT_MAX` | 96 | Maximum slots per tab (hard cap) |
+    | `DEFAULT_ITEM_SLOT_MAX` | 100 | Default stack size for stackable items |
+
+    Players can expand their inventory tabs by purchasing slot expansions up to `INVENTORY_SLOT_MAX`.
+  </Accordion>
+  <Accordion title="Trunk (account storage)">
+    The Trunk is a shared storage accessible from the Free Market:
+
+    | Constant | Value | Description |
+    |---|---|---|
+    | `TRUNK_SLOT_MAX` | 48 | Maximum number of slots in the trunk |
+  </Accordion>
+  <Accordion title="Cash Shop locker">
+    The locker holds Cash Shop items not currently in the regular inventory:
+
+    | Constant | Value | Description |
+    |---|---|---|
+    | `LOCKER_SLOT_MAX` | 500 | Maximum locker slots (capped to avoid packet size limits) |
+  </Accordion>
+  <Accordion title="Player shop">
+    Characters can open personal shops in the Free Market:
+
+    | Constant | Value | Description |
+    |---|---|---|
+    | `PLAYER_SHOP_SLOT_MAX` | 16 | Maximum items listed in a personal shop |
+  </Accordion>
+</AccordionGroup>
+
+## Equipment system
+
+Equipment items (`isEquip`: item IDs starting with `1`) carry stat data through `EquipData`. Supported modifications include:
+
+- **Scrolling** — upgrade slots reduced per scroll attempt; White Scroll (`2340000`) protects slots on failure
+- **Enhancement** — `EQUIP_ENHANCEMENT_SCROLL` and `ADVANCED_EQUIP_ENHANCEMENT_SCROLL` add base stats (`EQUIP_ENHANCEMENT_STAT_BASE = 2`, `EQUIP_ENHANCEMENT_ATT_BASE = 2`, `EQUIP_ENHANCEMENT_DEF_BASE = 2`)
+- **Potential** — `POTENTIAL_SCROLL` and `ADVANCED_POTENTIAL_SCROLL` reveal hidden stat lines; tier-up probabilities: Epic → 6% (`POTENTIAL_TIER_UP_EPIC`), Unique → 1.8% (`POTENTIAL_TIER_UP_UNIQUE`)
+- **Magnifying glass** — four tiers (Basic, Average, Advanced, Premium) to identify potential lines
+- **Miracle Cube** — re-rolls potential lines on an item
+
+Stat caps enforced by `GameConstants`:
+
+| Stat | Cap |
+|---|---|
+| STR / DEX / INT / LUK | 32,767 |
+| HP | 99,999 |
+| MP | 99,999 |
+| Physical attack (PAD) | 29,999 |
+| Magic attack (MAD) | 29,999 |
+| Physical defense (PDD) | 30,000 |
+| Magic defense (MDD) | 30,000 |
+| Accuracy (ACC) | 9,999 |
+| Evasion (EVA) | 9,999 |
+| Speed | 140 (min 100) |
+| Jump | 123 (min 100) |
+
+Ring data is handled through the separate `RingData` class to track couple/friend ring pairings.
+
+## Cash items
+
+Cash items live in the `CASH` inventory (item IDs starting with `5`). The `CashItemType` enum classifies special behaviors such as name tags, scissors of karma, and store permits. The `REGULAR_STORE_PERMIT` (`5140000`) allows a character to open a personal shop in the Free Market.
+
+The `Wheel of Destiny` (`5510000`) is a Cash item that revives a character after dying at a boss.
+
+## Pet system
+
+Up to three pets can be active simultaneously per character (`PET_COUNT_MAX = 3`). Pets are stored in the `CASH` inventory. Each pet has two progression stats:
+
+| Constant | Value | Description |
+|---|---|---|
+| `PET_COUNT_MAX` | 3 | Maximum active pets per character |
+| `PET_LEVEL_MAX` | 30 | Maximum pet level |
+| `PET_FULLNESS_MAX` | 100 | Maximum fullness (hunger) value |
+| `PET_FULLNESS_FOR_TAMENESS` | 75 | Minimum fullness for tameness gain |
+| `PET_TAMENESS_MAX` | 30,000 | Maximum tameness (closeness in GMS) |
+
+Pet level is determined by tameness thresholds defined in `PET_TAMENESS_TABLE`. The closeness required at each level:
+
+| Level | Tameness required |
+|---|---|
+| 1 | 1 |
+| 5 | 31 |
+| 10 | 287 |
+| 15 | 2,161 |
+| 20 | 6,801 |
+| 25 | 16,578 |
+| 30 | 30,000 |
+
+Pets gain tameness when fed pet food (`isPetFoodItem`: item ID prefix 212x) while fullness is at or above `PET_FULLNESS_FOR_TAMENESS`. Pet equipment uses item IDs with prefix 18xxxxx (`isPetEquipItem`).
+
+## Drop mechanics
+
+When mobs die, their drops are governed by several constants:
+
+| Constant | Value | Description |
+|---|---|---|
+| `DROP_HEIGHT` | 100 | Vertical drop distance (pixels) |
+| `DROP_SPREAD` | 20 | Horizontal scatter range |
+| `DROP_EXPIRE_INTERVAL` | 3 | Seconds between expiry checks |
+| `DROP_OWNERSHIP_EXPIRE_TIME` | 15 | Seconds of exclusive loot ownership |
+| `DROP_REMAIN_ON_GROUND_TIME` | 120 | Seconds before a drop disappears |
+| `DROP_MONEY_PROB` | 0.60 | Probability that a mob drops meso |
+
+Meso drop amounts scale with mob level via `GameConstants.getMoneyForMobLevel`.
+
+## Currency
+
+| Constant | Value | Description |
+|---|---|---|
+| `MONEY_MAX` | 2,147,483,647 | Maximum meso a character can hold (`Integer.MAX_VALUE`) |
+
+### Trade taxes
+
+Meso sent through the trade window is taxed by `getTradeTax`:
+
+| Amount | Tax rate |
+|---|---|
+| < 100,000 | 0% |
+| 100,000 – 999,999 | 0.8% |
+| 1,000,000 – 4,999,999 | 1.8% |
+| 5,000,000 – 9,999,999 | 3% |
+| 10,000,000 – 24,999,999 | 4% |
+| 25,000,000 – 99,999,999 | 5% |
+| ≥ 100,000,000 | 6% |
+
+Personal shop transactions use a reduced tax schedule via `getPersonalShopTax` (max 3% at 100M+).

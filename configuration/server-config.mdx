@@ -1,0 +1,100 @@
+---
+title: "World and gameplay configuration options"
+description: "Configure world identity, channel count, account behavior, inventory slot sizes, and debug options for your Kinoko server using environment variables."
+keywords: ["server config", "world", "channels", "inventory", "debug", "environment variables", "gameplay"]
+---
+
+`ServerConfig.java` holds the world-level settings that shape how players experience your server. These cover everything from how many channels you run to the number of inventory slots each character starts with. Like the network constants, every configurable field reads from an environment variable, so you can tune the server in Docker or a `.env` file without touching Java source.
+
+## Environment variables
+
+### World identity
+
+<ParamField query="WORLD_ID" default="0">
+  The zero-based index of this world. Leave this at `0` for a single-world setup. Increment it if you are running multiple named worlds on the same infrastructure.
+</ParamField>
+
+<ParamField query="WORLD_NAME" default="Kinoko">
+  The display name shown in the world selection screen. Change this to give your server a custom identity.
+</ParamField>
+
+<ParamField query="CHANNEL_COUNT" default="5">
+  The number of channel servers to start within this world. Each channel occupies one port starting at 8585, so five channels use ports 8585–8589. Make sure your Docker port mapping covers the full range.
+</ParamField>
+
+### Account and login behavior
+
+<ParamField query="AUTO_CREATE_ACCOUNT" default="true">
+  When `true`, an account is created automatically the first time a username is used to log in. Set to `false` if you want to manage accounts manually or through a registration system.
+</ParamField>
+
+<ParamField query="REQUIRE_SECONDARY_PASSWORD" default="true">
+  When `true`, players must set and enter a secondary PIN on login. Disable this if you want a frictionless login experience during development or private testing.
+</ParamField>
+
+### File system paths
+
+<ParamField query="WZ_DIRECTORY" default="wz">
+  Path to the directory containing WZ game data files. In Docker deployments this is typically set to `/kinoko/wz` to match the volume mount.
+</ParamField>
+
+<ParamField query="DATA_DIRECTORY" default="data">
+  Path to the directory containing YAML data files (shops, drops, Cash Shop). In Docker this is typically set to `/kinoko/data`.
+</ParamField>
+
+### Character and inventory slots
+
+<ParamField query="CHARACTER_BASE_SLOTS" default="3">
+  The number of character slots each account starts with. Players cannot create more characters than this value without additional slot expansions.
+</ParamField>
+
+<ParamField query="INVENTORY_BASE_SLOTS" default="24">
+  The number of slots in each inventory tab (Equip, Use, Setup, Etc, Cash) when a character is first created.
+</ParamField>
+
+<ParamField query="TRUNK_BASE_SLOTS" default="4">
+  The number of slots in the storage trunk (accessible through NPCs) when a character first uses it.
+</ParamField>
+
+### Commands and debugging
+
+<ParamField query="COMMAND_PREFIX" default="!">
+  The character that marks an in-game chat message as an admin command. For example, with the default prefix you would type `!reloadshops` in chat to reload shop data.
+</ParamField>
+
+<ParamField query="DEBUG_MODE" default="true">
+  When `true`, the server emits additional logging output useful for development. Disable in production to reduce log verbosity.
+</ParamField>
+
+<ParamField query="PLAIN_TRAFFIC" default="false">
+  When `true`, packet encryption is disabled entirely. Only use this when you need to inspect raw traffic with a packet sniffer during development.
+</ParamField>
+
+<Warning>
+  Setting `PLAIN_TRAFFIC=true` disables all packet encryption. Any client that connects will send and receive data in plaintext. Never enable this on a publicly reachable server.
+</Warning>
+
+## Docker example
+
+The default `docker-compose.yml` includes all of these variables with their defaults:
+
+```yaml
+services:
+  server:
+    environment:
+      # World
+      WORLD_ID: "0"
+      WORLD_NAME: "Kinoko"
+      CHANNEL_COUNT: "5"
+      # Accounts
+      AUTO_CREATE_ACCOUNT: "true"
+      REQUIRE_SECONDARY_PASSWORD: "true"
+      # Paths
+      WZ_DIRECTORY: "/kinoko/wz"
+      DATA_DIRECTORY: "/kinoko/data"
+      # Commands
+      COMMAND_PREFIX: "!"
+      DEBUG_MODE: "true"
+```
+
+You can override any value by editing this block or by creating a `.env` file in the project root and referencing it from your Compose file with `env_file: .env`.

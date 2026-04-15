@@ -1,0 +1,159 @@
+---
+title: "Guilds, parties, friends, and social systems"
+description: "Kinoko implements guilds, alliances, parties, expeditions, messengers, and friends — capacity limits, costs, and grade structures match MapleStory v95."
+---
+
+Kinoko implements the full suite of social systems present in MapleStory v95. You can form parties to hunt together, join or found a guild to build a persistent community, link guilds into an alliance, chat in a messenger room, and maintain a friends list. All capacity limits, costs, and grade structures are defined in `GameConstants` and enforced server-side.
+
+## Friends
+
+Your character can maintain a friends list of up to 100 players across all channels and worlds.
+
+| Constant | Value | Description |
+|---|---|---|
+| `FRIEND_MAX_BASE` | 20 | Starting friends list capacity |
+| `FRIEND_MAX` | 100 | Maximum friends list size |
+| `DEFAULT_FRIEND_GROUP` | `"Group Unknown"` | Default group name for new friend entries |
+
+Friends are stored as `Friend` objects with a `FriendStatus` (online/offline/unknown) and a group name. Group names let you organize your friends list into custom categories.
+
+<Note>
+  Friend list capacity can be expanded via Cash Shop purchases up to `FRIEND_MAX` (100).
+</Note>
+
+---
+
+## Parties
+
+Parties let up to six characters share experience and cooperate on boss fights and party quests.
+
+| Constant | Value | Description |
+|---|---|---|
+| `PARTY_MAX` | 6 | Maximum party members |
+
+### Party experience bonus
+
+When multiple party members are present in the same field, all members receive a bonus on top of the base kill experience. The bonus is calculated by `GameConstants.getPartyBonusExp`:
+
+| Members in party | Bonus |
+|---|---|
+| 1 | 0% |
+| 2 | 10% |
+| 3 | 15% |
+| 4 | 20% |
+| 5 | 25% |
+| 6 | 30% |
+
+<Tip>
+  The Holy Symbol skill's bonus is also affected by party size: solo use caps at +10%, while party use caps at +50% (via `GameConstants.getHolySymbolBonus`).
+</Tip>
+
+Party state is tracked via `PartyInfo` on the `User` object and the `Party` instance managed by the Central Server node. Party requests use `PartyRequestType` and results use `PartyResultType`.
+
+---
+
+## Expeditions
+
+Expeditions extend the party system for large-scale boss encounters.
+
+| Constant | Value | Description |
+|---|---|---|
+| `EXPEDITION_MAX` | 5 | Maximum number of concurrent expeditions |
+
+---
+
+## Guilds
+
+Guilds are persistent player organizations managed by the Central Server node through the `Guild` class. Founding a guild costs meso and starts with a minimum capacity.
+
+### Creation and costs
+
+| Constant | Value | Description |
+|---|---|---|
+| `CREATE_GUILD_COST` | 5,000,000 | Meso cost to create a guild |
+| `CREATE_EMBLEM_COST` | 500,000 | Meso cost to create a guild emblem |
+| `DELETE_EMBLEM_COST` | 1,000,000 | Meso cost to remove a guild emblem |
+| `GUILD_CAPACITY_MIN` | 10 | Starting member capacity |
+| `GUILD_CAPACITY_MAX` | 100 | Maximum member capacity |
+
+### Expanding guild capacity
+
+You can pay meso to expand your guild's member cap. The cost depends on the current cap, from `GameConstants.getGuildExpandCost`:
+
+| Current cap | Expansion cost |
+|---|---|
+| < 15 | 500,000 |
+| 15 – 19 | 1,500,000 |
+| 20 – 24 | 2,500,000 |
+| 25 – 29 | 3,500,000 |
+| 30 – 34 | 4,500,000 |
+| ≥ 35 | 5,000,000 |
+
+### Guild grades
+
+Every guild has five grade slots. The default grade names (from `GameConstants.GUILD_GRADE_NAMES`) are:
+
+| Grade index | Default name | `GuildRank` enum |
+|---|---|---|
+| 1 | Master | `MASTER` |
+| 2 | Jr.Master | `SUBMASTER` |
+| 3 | Member | `MEMBER1` |
+| 4 | Member | `MEMBER2` |
+| 5 | Member | `MEMBER3` |
+
+The Guild Master can rename any of the five grade slots. Members are sorted in the guild roster first by rank, then by level (descending).
+
+### Guild features
+
+- **Emblem** — A customizable badge composed of background shape, background color, foreground mark, and mark color stored as `markBg`, `markBgColor`, `mark`, `markColor` on the `Guild` object.
+- **Notice** — A short text notice visible to all guild members.
+- **Guild board** — A bulletin board (`GuildBoardEntry` list) with a pinned notice entry. Members can post and comment on entries.
+- **Guild points** — Accumulated through play; tracked as `points` on the `Guild`.
+- **Alliance membership** — A guild can belong to one alliance; the `allianceId` and `allianceName` are stored directly on the `Guild` object.
+
+---
+
+## Alliances
+
+Guilds can form alliances to coordinate across multiple guilds.
+
+| Constant | Value | Description |
+|---|---|---|
+| `CREATE_UNION_COST` | 5,000,000 | Meso cost to create a guild alliance |
+
+Alliance requests and results are handled through `AllianceRequestType` and `AllianceResultType`. An alliance is referenced from each member guild's `allianceId` field.
+
+---
+
+## Messengers
+
+The Messenger system provides a small private chat room for a handful of players.
+
+| Constant | Value | Description |
+|---|---|---|
+| `MESSENGER_MAX` | 3 | Maximum members per messenger room |
+
+Messenger state is managed through the `Messenger` class (on the Central Server node) and `MessengerUser` objects. Each `User` holds a `messengerId` field indicating their current room. Room creation, invitation, and leave operations are handled by `MessengerRequest` and `MessengerProtocol`.
+
+---
+
+## Rankings
+
+The `RankManager` on the Central Server node periodically recomputes world rankings. Rankings are used for the leaderboard visible in the in-game ranking UI and for guild GP standings.
+
+---
+
+## Summary of social limits
+
+| Feature | Limit | Constant |
+|---|---|---|
+| Friends list (base) | 20 | `FRIEND_MAX_BASE` |
+| Friends list (max) | 100 | `FRIEND_MAX` |
+| Party size | 6 | `PARTY_MAX` |
+| Expeditions | 5 | `EXPEDITION_MAX` |
+| Messenger room | 3 | `MESSENGER_MAX` |
+| Guild starting capacity | 10 | `GUILD_CAPACITY_MIN` |
+| Guild max capacity | 100 | `GUILD_CAPACITY_MAX` |
+| Guild creation cost | 5,000,000 meso | `CREATE_GUILD_COST` |
+| Alliance creation cost | 5,000,000 meso | `CREATE_UNION_COST` |
+| Guild emblem creation | 500,000 meso | `CREATE_EMBLEM_COST` |

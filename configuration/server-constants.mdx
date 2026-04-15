@@ -1,0 +1,69 @@
+---
+title: "Network and database environment variables"
+description: "Configure the low-level network addresses, ports, and database backend that Kinoko uses to connect nodes and store character data."
+keywords: ["server constants", "environment variables", "network", "database", "ports", "cassandra", "sqlite"]
+---
+
+`ServerConstants.java` holds the low-level settings that control how Kinoko nodes find each other, which address clients connect to, and where character data is stored. Every field in this class reads its value from an environment variable at startup, so you can change any setting without recompiling the server.
+
+## Environment variables
+
+<ParamField query="CENTRAL_HOST" default="127.0.0.1">
+  The IP address or hostname that all server nodes use to reach the central coordination node. Change this when your central node is on a different machine from the channel nodes.
+</ParamField>
+
+<ParamField query="CENTRAL_PORT" default="8282">
+  The TCP port the central coordination node listens on for inter-node communication. All channel and login nodes connect to this port.
+</ParamField>
+
+<ParamField query="SERVER_HOST" default="127.0.0.1">
+  The IP address that the game client connects to. When hosting publicly, set this to your server's public IP address so clients can reach the login and channel nodes.
+</ParamField>
+
+<ParamField query="DATABASE_PROVIDER" default="sqlite">
+  The database backend to use. Accepted values are `"sqlite"` (file-based, no extra setup required) and `"cassandra"` (for ScyllaDB or Apache Cassandra clusters).
+</ParamField>
+
+<ParamField query="DATABASE_HOST" default="127.0.0.1">
+  The hostname or IP address of the Cassandra or ScyllaDB node. Only used when `DATABASE_PROVIDER` is set to `"cassandra"`.
+</ParamField>
+
+<Note>
+  `LOGIN_PORT` (8484) and the base `CHANNEL_PORT` (8585, incrementing by one per channel) are fixed constants in the source code and are not configurable via environment variables. Make sure those ports are open in your firewall and mapped in Docker.
+</Note>
+
+## Docker example
+
+The default `docker-compose.yml` sets these values for a single-machine SQLite deployment:
+
+```yaml
+services:
+  server:
+    build: .
+    ports:
+      - 8484:8484
+      - 8585-8989:8585-8989
+    environment:
+      # Network
+      CENTRAL_HOST: "127.0.0.1"
+      CENTRAL_PORT: "8282"
+      SERVER_HOST: "127.0.0.1"
+      # Database
+      DATABASE_PROVIDER: "sqlite"
+```
+
+To switch to Cassandra, use `docker-compose.cassandra.yml`, which adds a `DATABASE_HOST` pointing to the database service and spins up a Cassandra container alongside the server:
+
+```yaml
+services:
+  server:
+    environment:
+      DATABASE_PROVIDER: "cassandra"
+      DATABASE_HOST: "database"
+  database:
+    image: cassandra:5.0.0-jammy
+    ports:
+      - 9042:9042
+```
+
+The Cassandra CQL port (`DATABASE_PORT`) is always `9042` and cannot be changed via an environment variable.

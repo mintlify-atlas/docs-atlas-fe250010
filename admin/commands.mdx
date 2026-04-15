@@ -1,0 +1,429 @@
+---
+title: "Admin command reference for Kinoko"
+description: "Every in-game admin command in Kinoko: player stats, item spawning, field warps, quest control, and live data reload. Command prefix is configurable."
+---
+
+Admin commands let you manage a running Kinoko server directly from within the game client. You type them in the in-game chat using a prefix — `!` by default — followed by the command name and any required arguments. Commands cover player management, world manipulation, item spawning, quest control, and live data reloading without a server restart.
+
+## Changing the command prefix
+
+The prefix is controlled by the `COMMAND_PREFIX` environment variable. Set it before starting the server:
+
+```bash
+COMMAND_PREFIX=/ java -jar kinoko.jar
+```
+
+If the variable is unset, the server defaults to `!`.
+
+<Note>
+  Type `!help` in-game to list all available commands. Type `!help <command>` to see the syntax for a specific command — for example, `!help item`.
+</Note>
+
+---
+
+## Player stats
+
+<AccordionGroup>
+  <Accordion title="!stat — set a character stat">
+    **Syntax:** `!stat <hp|mp|str|dex|int|luk|ap|sp> <value>`
+
+    Sets the base character stat to the given value. For jobs that use the extended SP system (Resistance classes), `sp` targets the correct SP table automatically.
+
+    ```
+    !stat str 999
+    !stat hp 30000
+    !stat sp 100
+    ```
+  </Accordion>
+
+  <Accordion title="!hp — set current HP">
+    **Syntax:** `!hp <value>`
+
+    Sets your character's current HP to the specified value. Useful for quick testing without changing max HP.
+
+    ```
+    !hp 1
+    ```
+  </Accordion>
+
+  <Accordion title="!mp — set current MP">
+    **Syntax:** `!mp <value>`
+
+    Sets your character's current MP to the specified value.
+
+    ```
+    !mp 9999
+    ```
+  </Accordion>
+
+  <Accordion title="!level — set character level">
+    **Syntax:** `!level <level>`
+
+    Sets your level directly to the specified value (1–200). Does not trigger level-up effects or award AP/SP.
+
+    ```
+    !level 100
+    ```
+  </Accordion>
+
+  <Accordion title="!levelup — level up to a target level">
+    **Syntax:** `!levelup <level>`
+
+    Repeatedly awards experience until your character reaches the target level, triggering all level-up animations and AP/SP grants along the way. The target must be higher than your current level.
+
+    ```
+    !levelup 70
+    ```
+  </Accordion>
+
+  <Accordion title="!job — change job">
+    **Syntax:** `!job <job ID>`
+
+    Changes your job to the specified job ID and updates your skill list to match. Also handles job-specific side effects such as spawning the Dragon companion for Evan or configuring Wild Hunter jaguar data.
+
+    ```
+    !job 122
+    ```
+  </Accordion>
+
+  <Accordion title="!skill — set a skill level">
+    **Syntax:** `!skill <skill ID> <level>`
+
+    Sets the skill identified by `skill ID` to the given level, capped at the skill's maximum level. The master level is also updated so skill books are not required.
+
+    ```
+    !skill 1121001 30
+    ```
+  </Accordion>
+
+  <Accordion title="!morph — apply a morph effect">
+    **Syntax:** `!morph <morph ID>`
+
+    Applies a morph temporary stat using the provided morph ID. The morph persists until you map-change or re-dispose.
+
+    ```
+    !morph 1000
+    ```
+  </Accordion>
+
+  <Accordion title="!ride — apply a ride vehicle effect">
+    **Syntax:** `!ride <vehicle item ID>`
+
+    Applies the `RideVehicle` temporary stat for the specified vehicle item ID, visually mounting your character on the vehicle.
+
+    ```
+    !ride 1932000
+    ```
+  </Accordion>
+
+  <Accordion title="!combo — set Aran combo count">
+    **Syntax:** `!combo <value>`
+
+    Sets the `ComboAbilityBuff` temporary stat to the specified combo count. Only meaningful for Aran characters.
+
+    ```
+    !combo 10
+    ```
+  </Accordion>
+
+  <Accordion title="!max — max out stats and skills">
+    **Syntax:** `!max`
+
+    Sets your level to 200, max HP and MP to 50 000, and maxes out all skills for your current job tree. Beginner skills are left unchanged. Useful for quickly testing end-game scenarios.
+  </Accordion>
+
+  <Accordion title="!avatar — change appearance">
+    **Syntax:** `!avatar <ID>`
+
+    Changes skin tone, face, or hair depending on the range of the ID provided:
+
+    - **Skin** — values 0–`SKIN_MAX`
+    - **Face** — values in the face ID range
+    - **Hair** — values in the hair ID range
+
+    ```
+    !avatar 20000
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Items and inventory
+
+<AccordionGroup>
+  <Accordion title="!item — give an item">
+    **Syntax:** `!item <item ID> [quantity]`
+
+    Adds the specified item to your inventory. If quantity is omitted, one copy is added. The quantity is automatically capped at the item's maximum stack size.
+
+    ```
+    !item 2000000 100
+    !item 1302000
+    ```
+  </Accordion>
+
+  <Accordion title="!clearinventory — clear an inventory tab">
+    **Syntax:** `!clearinventory <EQUIP|CONSUME|INSTALL|ETC|CASH>`
+
+    Removes every item from the specified inventory tab. This action is immediate and irreversible within the session.
+
+    ```
+    !clearinventory CONSUME
+    ```
+  </Accordion>
+
+  <Accordion title="!clearlocker — clear the Cash Shop locker">
+    **Syntax:** `!clearlocker`
+
+    Empties the account's Cash Shop locker (the storage area for unequipped Cash items).
+  </Accordion>
+
+  <Accordion title="!meso / !money — set meso amount">
+    **Syntax:** `!meso <amount>` or `!money <amount>`
+
+    Sets your meso count to the specified value. Both aliases do the same thing.
+
+    ```
+    !meso 999999999
+    ```
+  </Accordion>
+
+  <Accordion title="!nx — set NX prepaid balance">
+    **Syntax:** `!nx <amount>`
+
+    Sets the account's NX Prepaid balance to the specified value. This is the currency used in the Cash Shop.
+
+    ```
+    !nx 100000
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## World and field
+
+<AccordionGroup>
+  <Accordion title="!map / !warp — warp to a map">
+    **Syntax:** `!map <field ID> [portal name]`
+
+    Warps you to the specified field. If a portal name is provided you spawn at that portal; otherwise you spawn at the default spawn portal.
+
+    ```
+    !map 100000000
+    !map 100000000 sp
+    ```
+  </Accordion>
+
+  <Accordion title="!npc — start an NPC script">
+    **Syntax:** `!npc <NPC template ID>`
+
+    Looks up the NPC by template ID and immediately starts its associated script dialogue, as if you had clicked on it in the field.
+
+    ```
+    !npc 1001000
+    ```
+  </Accordion>
+
+  <Accordion title="!mob / !spawn — spawn a mob">
+    **Syntax:** `!mob <mob template ID> [count]`
+
+    Spawns one or more copies of the specified mob at your current position. If count is omitted, one mob is spawned.
+
+    ```
+    !mob 100100
+    !mob 8800000 5
+    ```
+  </Accordion>
+
+  <Accordion title="!togglemob — enable or disable mob spawns">
+    **Syntax:** `!togglemob <true|false>`
+
+    Enables (`true`) or disables (`false`) automatic mob spawning in the current field. Mobs already present are unaffected.
+
+    ```
+    !togglemob false
+    ```
+  </Accordion>
+
+  <Accordion title="!killmobs — kill all mobs in the field">
+    **Syntax:** `!killmobs`
+
+    Instantly kills every living mob in your current field. Each mob is dealt its full max HP as damage and leaves via the `ETC` leave type.
+  </Accordion>
+
+  <Accordion title="!reactor — spawn a reactor">
+    **Syntax:** `!reactor <reactor template ID>`
+
+    Spawns a reactor object at your current position using the specified template ID.
+
+    ```
+    !reactor 100000
+    ```
+  </Accordion>
+
+  <Accordion title="!hitreactor — advance a reactor's state">
+    **Syntax:** `!hitreactor <reactor template ID>`
+
+    Finds the reactor with the given template ID in the current field and advances its state by one, simulating a hit. Use this to trigger reactor events without actually attacking.
+
+    ```
+    !hitreactor 100000
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Quests
+
+<AccordionGroup>
+  <Accordion title="!startquest — force-start a quest">
+    **Syntax:** `!startquest <quest ID>`
+
+    Force-starts the quest, bypassing all start requirements and conditions.
+
+    ```
+    !startquest 2010
+    ```
+  </Accordion>
+
+  <Accordion title="!completequest — force-complete a quest">
+    **Syntax:** `!completequest <quest ID>`
+
+    Force-completes the quest, bypassing all completion requirements and condition checks.
+
+    ```
+    !completequest 2010
+    ```
+  </Accordion>
+
+  <Accordion title="!clearquest — reset a quest to NONE state">
+    **Syntax:** `!clearquest <quest ID>`
+
+    Resets the quest record to the `NONE` state, effectively un-starting it. Use this to repeat a quest from scratch.
+
+    ```
+    !clearquest 2010
+    ```
+  </Accordion>
+
+  <Accordion title="!questex / !qr — read or write quest extended data">
+    **Syntax:** `!questex <quest ID> [value]`
+
+    When called with only a quest ID, prints the current QR (quest-ex) string value for that quest. When called with a value, sets the QR string and updates the quest record.
+
+    ```
+    !qr 2010
+    !questex 2010 some_value
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Utility
+
+<AccordionGroup>
+  <Accordion title="!info — display character and field debug info">
+    **Syntax:** `!info`
+
+    Prints a summary of your character's current state to the system chat: HP/MP, base stats (STR/DEX/INT/LUK), AP, SP, damage range, field ID and type, coordinates, nearest foothold, nearest portal, and the nearest mob, NPC, and reactor within a 400-pixel radius.
+  </Accordion>
+
+  <Accordion title="!find / !lookup / !search — look up game data">
+    **Syntax:** `!find <type> <id or name>`
+
+    Searches the server's in-memory data for the specified type. All three command names are aliases for the same function.
+
+    | Type | Lookup behaviour |
+    |---|---|
+    | `item` | Search by item ID or partial name |
+    | `map` | Search by map ID or partial name |
+    | `mob` | Search by mob ID or partial name |
+    | `npc` | Search by NPC ID or partial name; also prints the maps where the NPC appears |
+    | `skill` | Search by skill ID or partial name |
+    | `quest` | Search by quest ID or partial name |
+    | `commodity` | Look up a Cash Shop commodity by numeric ID only |
+
+    When a name search returns multiple results, all matches are listed. When exactly one match is found, full detail is shown.
+
+    ```
+    !find item Elixir
+    !find map Henesys
+    !find npc Athena Pierce
+    !find commodity 10001062
+    ```
+  </Accordion>
+
+  <Accordion title="!dispose — reset UI state">
+    **Syntax:** `!dispose`
+
+    Closes any open NPC dialogue and resets your client's UI state. Use this when your character gets stuck in a dialogue that won't close.
+  </Accordion>
+
+  <Accordion title="!test — run a diagnostic test">
+    **Syntax:** `!test`
+
+    Prints diagnostics to the system chat: total users online in the world, users in your current field, and your party ID. Also applies a test consume-item effect and disposes.
+  </Accordion>
+
+  <Accordion title="!cd — clear all skill cooldowns">
+    **Syntax:** `!cd`
+
+    Removes every active cooldown from your character's skill manager and notifies the client to reset each timer to zero.
+  </Accordion>
+
+  <Accordion title="!battleship / !bship — check Battleship HP">
+    **Syntax:** `!battleship` or `!bship`
+
+    Prints the current Battleship Durability value for your character. Only relevant for Corsair characters who have the Battleship skill.
+  </Accordion>
+
+  <Accordion title="!jaguar — set Wild Hunter jaguar">
+    **Syntax:** `!jaguar <index>`
+
+    Sets the Wild Hunter's riding type (jaguar index) and syncs the change to the client. Only meaningful for Wild Hunter characters.
+
+    ```
+    !jaguar 2
+    ```
+  </Accordion>
+
+  <Accordion title="!mobskill — apply a mob skill effect">
+    **Syntax:** `!mobskill <skill ID> <skill level>`
+
+    Applies the character temporary stat associated with the specified mob skill type at the given skill level. Useful for testing how mob debuffs affect your character.
+
+    ```
+    !mobskill 120 1
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Reload
+
+These commands reload data files from disk while the server is running. No restart is required. See [Data customization](/admin/data-customization) for the file formats they reload.
+
+<AccordionGroup>
+  <Accordion title="!reloaddrops — reload drop tables">
+    **Syntax:** `!reloaddrops`
+
+    Re-reads all YAML files under `data/reward/` and rebuilds the in-memory drop table. Changes take effect immediately for any mob killed after the reload.
+  </Accordion>
+
+  <Accordion title="!reloadshops — reload NPC shop inventories">
+    **Syntax:** `!reloadshops`
+
+    Re-reads all YAML files under `data/shop/` and rebuilds NPC shop inventories. Players must close and reopen a shop to see updated items.
+  </Accordion>
+
+  <Accordion title="!reloadcashshop / !reloadcs — reload Cash Shop data">
+    **Syntax:** `!reloadcashshop` or `!reloadcs`
+
+    Re-reads `data/cash/commodity.yaml` and `data/cash/modified.yaml` and rebuilds the in-memory Cash Shop commodity list.
+  </Accordion>
+</AccordionGroup>

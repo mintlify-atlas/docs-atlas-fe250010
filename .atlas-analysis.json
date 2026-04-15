@@ -1,0 +1,86 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "Kinoko",
+  "projectDescription": "Kinoko is an open-source server emulator for MapleStory v95 (GMS/BMS locale 8), written in Java using Netty, supporting SQLite and Cassandra/ScyllaDB backends and full Docker deployment.",
+  "theme": "aspen",
+  "primaryColor": "#1c63ec",
+  "lightColor": "#89b5d6",
+  "darkColor": "#1346b9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "docker-setup"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/server-constants",
+              "configuration/server-config",
+              "configuration/data-files"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/server-nodes",
+              "architecture/database"
+            ]
+          },
+          {
+            "group": "Game Systems",
+            "pages": [
+              "systems/jobs-classes",
+              "systems/quests-scripts",
+              "systems/items-inventory",
+              "systems/social-features"
+            ]
+          },
+          {
+            "group": "Administration",
+            "pages": [
+              "admin/commands",
+              "admin/data-customization"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "MapleStory v95 (GMS locale 8) protocol emulation via Netty",
+    "Multi-node architecture: Login, Central, and Channel server nodes",
+    "Dual database support: SQLite (default, zero-config) and Cassandra/ScyllaDB",
+    "Full job support: Explorers, Cygnus Knights, Aran, Evan, and Resistance classes",
+    "WZ file-based data loading for items, maps, mobs, NPCs, quests, skills, and reactors",
+    "JavaScript-based NPC/quest/event scripting via ScriptDispatcher",
+    "Cash Shop with configurable commodity and modified item YAML files",
+    "In-game admin command system with prefix-based dispatch",
+    "Docker Compose support for both SQLite and Cassandra deployments",
+    "Configurable world settings: channel count, slot limits, secondary password, debug mode"
+  ],
+  "publicApiSurface": [
+    "kinoko.server.Server#main — entry point, initializes all providers and server nodes",
+    "kinoko.server.ServerConstants — CENTRAL_HOST, CENTRAL_PORT, SERVER_HOST, LOGIN_PORT, CHANNEL_PORT, DATABASE_PROVIDER",
+    "kinoko.server.ServerConfig — WORLD_ID, WORLD_NAME, CHANNELS_PER_WORLD, AUTO_CREATE_ACCOUNT, REQUIRE_SECONDARY_PASSWORD, WZ_DIRECTORY, DATA_DIRECTORY, COMMAND_PREFIX, DEBUG_MODE",
+    "kinoko.server.node.LoginServerNode — handles client login flow on port 8484",
+    "kinoko.server.node.ChannelServerNode — handles in-game channel sessions on ports 8585–8989",
+    "kinoko.server.node.CentralServerNode — inter-node coordination hub on port 8282",
+    "kinoko.server.command.AdminCommands — in-game admin commands: !item, !map/warp, !mob/spawn, !level, !job, !skill, !quest, !find, !max, etc.",
+    "kinoko.script.common.ScriptDispatcher — NPC, portal, quest, and event script execution engine",
+    "kinoko.database.DatabaseManager — initializes and manages SQLite or Cassandra connections",
+    "kinoko.provider.* — data providers: ItemProvider, MapProvider, MobProvider, NpcProvider, QuestProvider, SkillProvider, RewardProvider, ShopProvider",
+    "data/shop/<npcId>.yaml — NPC shop item definitions",
+    "data/reward/<mobId or map>.yaml — mob/map drop reward definitions",
+    "data/cash/commodity.yaml — Cash Shop commodity listings",
+    "data/cash/modified.yaml — modified Cash Shop commodity overrides"
+  ]
+}

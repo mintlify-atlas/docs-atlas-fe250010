@@ -1,0 +1,58 @@
+---
+title: "Kinoko: MapleStory v95 server emulator"
+description: "Kinoko is an open-source MapleStory v95 server emulator in Java. Runs a full Login, Central, and Channel node stack with SQLite or Cassandra."
+---
+
+Kinoko is a feature-complete server emulator for MapleStory version 95 (GMS/BMS locale 8). It faithfully reproduces the game's multi-node server architecture — Login, Central, and Channel nodes — using Netty for high-performance networking. Whether you want to run a private server for nostalgia or study classic MapleStory game mechanics, Kinoko gives you a solid, configurable foundation.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build and run your first Kinoko server in minutes using Java and Maven
+  </Card>
+  <Card title="Docker Setup" icon="docker" href="/docker-setup">
+    Deploy with Docker Compose — SQLite or Cassandra, one command
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration/server-constants">
+    Tune ports, database backend, world settings, and more via environment variables
+  </Card>
+  <Card title="Admin Commands" icon="terminal" href="/admin/commands">
+    Full reference for in-game admin commands: items, warps, mobs, skills, and quests
+  </Card>
+</CardGroup>
+
+## What Kinoko emulates
+
+Kinoko targets **MapleStory v95** and covers the full breadth of that era's content:
+
+- **All job branches** — Explorers, Cygnus Knights, Aran, Evan, and Resistance classes (Battle Mage, Wild Hunter, Mechanic)
+- **Complete world systems** — guilds, alliances, parties, friends, messengers, and expeditions
+- **Cash Shop** — configurable commodity listings and NX currency
+- **NPC scripting** — Java-based annotated script handlers for NPCs, portals, quests, and events
+- **Field events** — Continental ship routes, airport flights, elevator events, and subways
+- **Persistent storage** — character data, quests, skills, items, and guild records saved to SQLite or Cassandra
+
+## How the server is structured
+
+<CardGroup cols={3}>
+  <Card title="Architecture overview" icon="diagram-project" href="/architecture/overview">
+    Understand the Login, Central, and Channel node topology
+  </Card>
+  <Card title="Game systems" icon="gamepad" href="/systems/jobs-classes">
+    Jobs, quests, scripting, inventory, and social features
+  </Card>
+  <Card title="Data customization" icon="file-yaml" href="/admin/data-customization">
+    Customize NPC shops, mob drops, and Cash Shop inventory
+  </Card>
+</CardGroup>
+
+## Prerequisites
+
+Before running Kinoko you need:
+
+- **Java 21** (JDK) and **Maven** for building from source, or **Docker** for the containerized path
+- **MapleStory v95 WZ files** — the client data files Kinoko reads at startup (see [Quickstart](/quickstart) for the full list)
+- Optional: **CassandraDB 5** or **ScyllaDB** if you prefer a distributed database over the default SQLite
+
+<Note>
+  Kinoko does not redistribute WZ files. You must provide your own copy of the MapleStory v95 client data.
+</Note>

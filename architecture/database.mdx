@@ -1,0 +1,144 @@
+---
+title: "SQLite and Cassandra database backends"
+description: "Kinoko supports SQLite (zero-config, default) and Cassandra/ScyllaDB backends. Select via DATABASE_PROVIDER. Both persist the same 23 schema entity types."
+---
+
+Kinoko supports two database backends that you can select via the `DATABASE_PROVIDER` environment variable. `DatabaseManager.initialize()` reads that variable at startup and instantiates either a `SqliteConnector` or a `CassandraConnector`. Both connectors expose the same set of accessor interfaces — `AccountAccessor`, `CharacterAccessor`, `FriendAccessor`, `GuildAccessor`, `GiftAccessor`, `MemoAccessor`, and `IdAccessor` — so the rest of the server is fully decoupled from the underlying storage technology.
+
+```java
+// DatabaseManager.java
+switch (ServerConstants.DATABASE_PROVIDER) {
+    case "cassandra" -> connector = new CassandraConnector();
+    case "sqlite"    -> connector = new SqliteConnector();
+    default -> throw new IllegalArgumentException(
+        "Unknown database provider : " + ServerConstants.DATABASE_PROVIDER);
+}
+connector.initialize();
+```
+
+## SQLite
+
+SQLite is the default backend (`DATABASE_PROVIDER=sqlite`). The connector stores all data in a single local file — no external process, no configuration. It is ideal for single-machine development, testing, and small private servers.
+
+```bash
+# No DATABASE_HOST or DATABASE_PORT needed — SQLite is file-based
+DATABASE_PROVIDER=sqlite
+```
+
+The `SqliteConnector` creates the schema automatically on first run using JDBC, so you do not need to run any migration scripts manually.
+
+<Tip>
+  SQLite requires no setup at all. If you are running Kinoko locally for the first time, leave `DATABASE_PROVIDER` unset (or set it to `sqlite`) and the server will create and initialize the database file for you on startup.
+</Tip>
+
+## Cassandra / ScyllaDB
+
+The Cassandra backend (`DATABASE_PROVIDER=cassandra`) connects to a Cassandra 5 or ScyllaDB instance on port **9042**. Use this backend when you need horizontal scalability or want to distribute load across multiple database nodes.
+
+```bash
+DATABASE_PROVIDER=cassandra
+DATABASE_HOST=127.0.0.1   # hostname or IP of the Cassandra/ScyllaDB node
+# DATABASE_PORT is fixed at 9042 in ServerConstants
+```
+
+The `CassandraConnector` uses the DataStax Java driver. It creates its keyspace and tables automatically when the server first starts, so no manual CQL schema setup is needed.
+
+### Docker Compose with Cassandra
+
+The `docker-compose.cassandra.yml` file included in the repository wires a `cassandra:5.0.0` container to the Kinoko server service. The server container declares a `depends_on` health check so it waits for the Cassandra port to be reachable before initializing.
+
+```yaml
+# docker-compose.cassandra.yml
+services:
+  server:
+    build: .
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - 8484:8484
+      - 8585-8989:8585-8989
+    volumes:
+      - ./data:/kinoko/data
+      - ./wz:/kinoko/wz
+    environment:
+      DATABASE_PROVIDER: "cassandra"
+      DATABASE_HOST: "database"
+  database:
+    image: cassandra:5.0.0-jammy
+    ports:
+      - 9042:9042
+    healthcheck:
+      test: [ "CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/9042' || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+```
+
+Start the stack with:
+
+```bash
+docker compose -f docker-compose.cassandra.yml up
+```
+
+## Schema entities
+
+Both backends persist the same set of entities, defined as schema classes in `kinoko/database/schema/`. The table below lists every schema file and the data it represents.
+
+<AccordionGroup>
+  <Accordion title="Account and identity">
+    | Schema class | Data stored |
+    |---|---|
+    | `AccountSchema` | Login credentials, account flags, donation currency |
+    | `IdSchema` | Auto-increment ID counters (characters, guilds, parties, etc.) |
+    | `ConfigSchema` | Per-account settings and flags |
+  </Accordion>
+  <Accordion title="Character core">
+    | Schema class | Data stored |
+    |---|---|
+    | `CharacterDataSchema` | Name, job, level, EXP, map, face, hair, skin |
+    | `CharacterStatSchema` | HP, MP, AP/SP allocation, fame, mesos |
+    | `InventorySchema` | Inventory slot metadata per inventory type |
+    | `EquipDataSchema` | Equipment upgrade counts, stats, scrolled values |
+    | `ItemSchema` | Stackable item quantities and expiry |
+    | `SkillRecordSchema` | Skill levels and master levels |
+    | `QuestRecordSchema` | Quest states and progress values |
+  </Accordion>
+  <Accordion title="Character extras">
+    | Schema class | Data stored |
+    |---|---|
+    | `PetDataSchema` | Pet name, level, closeness, fullness |
+    | `RingDataSchema` | Friendship and couple ring partner data |
+    | `WildHunterInfoSchema` | Wild Hunter jaguar state |
+    | `MiniGameRecordSchema` | Omok and Match Card win/loss/tie records |
+    | `MapTransferInfoSchema` | Teleport Rock and VIP Rock saved maps |
+    | `CashItemInfoSchema` | Cash inventory item serial numbers and expiry |
+  </Accordion>
+  <Accordion title="Social and world">
+    | Schema class | Data stored |
+    |---|---|
+    | `FriendSchema` | Friend list entries and status flags |
+    | `GuildSchema` | Guild name, emblem, notice, and rank titles |
+    | `GuildMemberSchema` | Per-member guild rank and contribution |
+    | `GuildBoardEntrySchema` | Guild notice board posts |
+    | `GuildBoardCommentSchema` | Comments on guild board posts |
+    | `GiftSchema` | Cash Shop gift records |
+    | `MemoSchema` | Offline mail messages between characters |
+  </Accordion>
+</AccordionGroup>
+
+## Switching backends
+
+To switch from SQLite to Cassandra (or back), set `DATABASE_PROVIDER` before starting the server. There is no built-in data migration tool; if you need to move existing data between backends you must export and re-import it manually.
+
+```bash
+# Switch to Cassandra
+DATABASE_PROVIDER=cassandra DATABASE_HOST=my-cassandra-host java -jar kinoko.jar
+
+# Switch back to SQLite (default)
+DATABASE_PROVIDER=sqlite java -jar kinoko.jar
+```
+
+<Warning>
+  Changing `DATABASE_PROVIDER` on a running server with existing players will result in an empty world — the new backend starts with no accounts or characters. Plan any backend switch during downtime and migrate your data first.
+</Warning>

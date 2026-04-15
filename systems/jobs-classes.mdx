@@ -1,0 +1,233 @@
+---
+title: "Playable jobs and character classes in Kinoko"
+description: "All MapleStory v95 job branches in Kinoko: Explorers, Cygnus Knights, Aran, Evan, and Resistance. Full job ID table, advancement levels, and branch mechanics."
+---
+
+Kinoko implements all playable job branches present in MapleStory v95. Each character you create belongs to one of four branches — Explorer, Cygnus Knights, Legend, or Resistance — and advances through successive job tiers, unlocking new skills at each transition. Level caps, advancement requirements, and branch-specific mechanics (Evan's dragon, Aran's combo system, Wild Hunter's jaguar) are all handled server-side.
+
+<Note>
+  Cygnus Knights have a level cap of **120**, enforced via `ServerConfig.CYGNUS_LEVEL_MAX`. All other branches cap at level **200**.
+</Note>
+
+## Job progression overview
+
+Job IDs follow a numeric scheme where the thousands digit encodes the branch (0 = Explorer, 1 = Cygnus Knights, 2 = Legend, 3 = Resistance) and the remaining digits encode the class category and advancement tier.
+
+<Tabs>
+  <Tab title="Explorers">
+    Explorers are the classic MapleStory branch. They begin as **Beginner** (job ID 0) and advance through 1st, 2nd, 3rd, and 4th job, reaching level 200.
+
+    **Warrior**
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Beginner | 0 | Novice |
+    | Warrior | 100 | 1st |
+    | Fighter | 110 | 2nd |
+    | Crusader | 111 | 3rd |
+    | Hero | 112 | 4th |
+    | Page | 120 | 2nd |
+    | White Knight | 121 | 3rd |
+    | Paladin | 122 | 4th |
+    | Spearman | 130 | 2nd |
+    | Dragon Knight | 131 | 3rd |
+    | Dark Knight | 132 | 4th |
+
+    **Magician**
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Magician | 200 | 1st |
+    | Wizard (F/P) | 210 | 2nd |
+    | Mage (F/P) | 211 | 3rd |
+    | Arch Mage (F/P) | 212 | 4th |
+    | Wizard (I/L) | 220 | 2nd |
+    | Mage (I/L) | 221 | 3rd |
+    | Arch Mage (I/L) | 222 | 4th |
+    | Cleric | 230 | 2nd |
+    | Priest | 231 | 3rd |
+    | Bishop | 232 | 4th |
+
+    <Note>Explorer Magicians advance at level 8 (one level earlier than other Explorer classes, which advance at level 10).</Note>
+
+    **Bowman**
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Archer | 300 | 1st |
+    | Hunter | 310 | 2nd |
+    | Ranger | 311 | 3rd |
+    | Bowmaster | 312 | 4th |
+    | Crossbowman | 320 | 2nd |
+    | Sniper | 321 | 3rd |
+    | Marksman | 322 | 4th |
+
+    **Thief**
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Rogue | 400 | 1st |
+    | Assassin | 410 | 2nd |
+    | Hermit | 411 | 3rd |
+    | Night Lord | 412 | 4th |
+    | Bandit | 420 | 2nd |
+    | Chief Bandit | 421 | 3rd |
+    | Shadower | 422 | 4th |
+
+    **Dual Blade** (Thief subclass)
+
+    Dual Blades use a unique five-tier progression starting from Blade Recruit. Characters born as a Dual Blade (`subJob == 1`) have earlier 2nd-job (level 20) and 3rd-job (level 55) transitions compared to standard Explorer advancement.
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Blade Recruit | 430 | 1st |
+    | Blade Acolyte | 431 | 2nd |
+    | Blade Specialist | 432 | 3rd |
+    | Blade Lord | 433 | 4th |
+    | Blade Master | 434 | 5th |
+
+    **Pirate**
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Pirate | 500 | 1st |
+    | Brawler | 510 | 2nd |
+    | Marauder | 511 | 3rd |
+    | Buccaneer | 512 | 4th |
+    | Gunslinger | 520 | 2nd |
+    | Outlaw | 521 | 3rd |
+    | Corsair | 522 | 4th |
+
+    <Tip>
+      Pirate-category jobs (`getJobCategory == 5`) are the only classes that can attack bare-handed via `JobConstants.canUseBareHand`.
+    </Tip>
+  </Tab>
+  <Tab title="Cygnus Knights">
+    Cygnus Knights begin as **Noblesse** (job ID 1000) on Ereve and advance through three job tiers, capping at level **120**. They do not have a 4th-job advancement. Each of the five knight orders corresponds to an Explorer weapon type.
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Noblesse | 1000 | Novice |
+    | Dawn Warrior 1 | 1100 | 1st |
+    | Dawn Warrior 2 | 1110 | 2nd |
+    | Dawn Warrior 3 | 1111 | 3rd |
+    | Blaze Wizard 1 | 1200 | 1st |
+    | Blaze Wizard 2 | 1210 | 2nd |
+    | Blaze Wizard 3 | 1211 | 3rd |
+    | Wind Archer 1 | 1300 | 1st |
+    | Wind Archer 2 | 1310 | 2nd |
+    | Wind Archer 3 | 1311 | 3rd |
+    | Night Walker 1 | 1400 | 1st |
+    | Night Walker 2 | 1410 | 2nd |
+    | Night Walker 3 | 1411 | 3rd |
+    | Thunder Breaker 1 | 1500 | 1st |
+    | Thunder Breaker 2 | 1510 | 2nd |
+    | Thunder Breaker 3 | 1511 | 3rd |
+  </Tab>
+  <Tab title="Legend">
+    The Legend branch contains two distinct classes: **Aran** and **Evan**. Both start on their own beginner maps and use the extended SP system (`isExtendSpJob` returns `true`), meaning skill points are distributed across a wider range of levels tied to character level thresholds rather than fixed advancement steps.
+
+    **Aran**
+
+    Aran begins as `ARAN_BEGINNER` (job ID 2000) and advances through four standard job tiers to level 200. Aran has a combo system that builds combo count through attacks, enabling special combo-based skills.
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Aran Beginner | 2000 | Novice |
+    | Aran 1 | 2100 | 1st |
+    | Aran 2 | 2110 | 2nd |
+    | Aran 3 | 2111 | 3rd |
+    | Aran 4 | 2112 | 4th |
+
+    **Evan**
+
+    Evan begins as `EVAN_BEGINNER` (job ID 2001) and advances through ten tiers. Each tier corresponds to a level milestone rather than a single advancement. Evan's bond with Mir the dragon powers a separate `Dragon` entity tracked on the `User` object; dragon skills (`isDragonJob`) belong to job prefix 22.
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Evan Beginner | 2001 | Novice |
+    | Evan 1 | 2200 | 1st |
+    | Evan 2 | 2210 | 2nd |
+    | Evan 3 | 2211 | 3rd |
+    | Evan 4 | 2212 | 4th |
+    | Evan 5 | 2213 | 5th |
+    | Evan 6 | 2214 | 6th |
+    | Evan 7 | 2215 | 7th |
+    | Evan 8 | 2216 | 8th |
+    | Evan 9 | 2217 | 9th |
+    | Evan 10 | 2218 | 10th |
+
+    Evan's SP tier thresholds (from `JobConstants.getExtendSpJobLevel`):
+
+    | Level range | SP tier |
+    |---|---|
+    | 1–10 | 0 |
+    | 11–20 | 1 |
+    | 21–30 | 2 |
+    | 31–40 | 3 |
+    | 41–50 | 4 |
+    | 51–60 | 5 |
+    | 61–80 | 6 |
+    | 81–100 | 7 |
+    | 101–120 | 8 |
+    | 121–160 | 9 |
+    | 161–200 | 10 |
+  </Tab>
+  <Tab title="Resistance">
+    Resistance characters begin as **Citizen** (job ID 3000) in Edelstein and advance through four job tiers to level 200. Like Evan, Resistance jobs use the extended SP system.
+
+    **Battle Mage**
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Battle Mage 1 | 3200 | 1st |
+    | Battle Mage 2 | 3210 | 2nd |
+    | Battle Mage 3 | 3211 | 3rd |
+    | Battle Mage 4 | 3212 | 4th |
+
+    **Wild Hunter**
+
+    Wild Hunters ride jaguars in combat. The jaguar is tracked as a mob via `GameConstants.isJaguarMob` (template IDs 9304000–9304005), and rider state is managed through `WildHunterInfo` on the `User` object.
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Wild Hunter 1 | 3300 | 1st |
+    | Wild Hunter 2 | 3310 | 2nd |
+    | Wild Hunter 3 | 3311 | 3rd |
+    | Wild Hunter 4 | 3312 | 4th |
+
+    **Mechanic**
+
+    | Job | ID | Tier |
+    |---|---|---|
+    | Mechanic 1 | 3500 | 1st |
+    | Mechanic 2 | 3510 | 2nd |
+    | Mechanic 3 | 3511 | 3rd |
+    | Mechanic 4 | 3512 | 4th |
+  </Tab>
+</Tabs>
+
+## Standard advancement levels
+
+For non-Evan, non-Resistance jobs the advancement level thresholds are:
+
+| Tier | Level |
+|---|---|
+| 1st job | 10 (Magicians: 8) |
+| 2nd job | 30 (Dual Blade: 20) |
+| 3rd job | 70 (Dual Blade: 55) |
+| 4th job | 120 |
+
+Resistance and Evan jobs use extended SP and their job-change level always resolves to **200** (the character's level cap) in `JobConstants.getJobChangeLevel`.
+
+## GM and special jobs
+
+Three internal job IDs exist for server administration and are not available to regular players:
+
+| Job | ID |
+|---|---|
+| Manager | 800 |
+| GM | 900 |
+| Super GM | 910 |
+
+An additional pseudo-job `ADDITIONAL_SKILLS` (ID 9000) is used internally to attach extra skill roots.

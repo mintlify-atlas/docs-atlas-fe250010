@@ -1,0 +1,208 @@
+---
+title: "Customizing shops, drops, and Cash Shop data"
+description: "Edit YAML files in data/ to customize NPC shops, mob drop tables, and Cash Shop listings. Apply changes to a live server without restarting."
+---
+
+Kinoko reads NPC shop inventory, mob drop tables, and Cash Shop commodity listings from YAML files stored in the `data/` directory. You can modify these files to change what items NPCs sell, what mobs drop, and which items appear in the Cash Shop — and you can apply all changes to a live server without restarting using the built-in reload commands.
+
+---
+
+## NPC shops
+
+NPC shop files live in `data/shop/`. Each file is named after the **NPC's template ID** with a `.yaml` extension.
+
+```
+data/shop/
+├── 1001000.yaml   # Silver (weapon seller, Lith Harbor)
+├── 1001001.yaml
+└── ...
+```
+
+### File structure
+
+Each file has an optional `recharge` flag and an `items` list. Each entry in `items` is a two-element array: `[item ID, price]`.
+
+```yaml
+# Silver : Weapon Seller (1001000) - Lith Harbor : Lith Harbor Weapon Store (104000003)
+
+recharge: true
+items:
+  - [ 1302000, 50 ]    # Sword
+  - [ 1302007, 3000 ]  # Long Sword
+  - [ 1312000, 3000 ]  # Double Axe
+  - [ 1312004, 50 ]    # Hand Axe
+  - [ 1322005, 50 ]    # Wooden Club
+  - [ 1332007, 1000 ]  # Fruit Knife
+```
+
+| Field | Description |
+|---|---|
+| `recharge` | When `true`, the shop supports rechargeable items (arrows, stars, bullets). Omit or set to `false` to disable. |
+| `items` | List of `[itemId, price]` pairs. Price is in mesos. |
+
+### Adding items to a shop
+
+Open the YAML file for the NPC and append a new entry to the `items` list:
+
+```yaml
+items:
+  - [ 1302000, 50 ]   # Sword (existing)
+  - [ 2000001, 100 ]  # Blue Potion (new)
+```
+
+Then run `!reloadshops` in-game to apply the change immediately.
+
+<Tip>
+  Not sure which NPC ID to use? Run `!find npc <name>` in-game to search by partial name. For example, `!find npc Weapon Seller` lists all matching NPCs and their template IDs.
+</Tip>
+
+### Creating a shop for a new NPC
+
+If no file exists for an NPC, that NPC has no shop. Create a new file named `<npcId>.yaml` in `data/shop/` with the structure above, then run `!reloadshops`.
+
+---
+
+## Drop tables
+
+Mob drop table files live in `data/reward/`. Each file is named after the **mob's template ID** with a `.yaml` extension.
+
+```
+data/reward/
+├── 100000.yaml   # Snail
+├── 100100.yaml   # Blue Snail
+└── ...
+```
+
+### File structure
+
+Each file contains a `rewards` list. Each entry is a four-element array: `[item ID, min quantity, max quantity, probability]`.
+
+```yaml
+# Snail (100100)
+
+rewards:
+  - [ 0, 1, 1, 0.600000 ]              # mesos (item ID 0 = mesos)
+  - [ 1002067, 1, 1, 0.000100 ]        # Green Headband
+  - [ 2000000, 1, 1, 0.010000 ]        # Red Potion
+  - [ 2010009, 1, 1, 0.010000 ]        # Green Apple
+  - [ 2040002, 1, 1, 0.000100 ]        # Scroll for Helmet for DEF 10%
+  - [ 2060000, 10, 20, 0.008000 ]      # Arrow for Bow (10–20 quantity)
+  - [ 4000019, 1, 1, 0.400000 ]        # Snail Shell
+  - [ 4010000, 1, 1, 0.002000 ]        # Bronze Ore
+```
+
+| Field | Description |
+|---|---|
+| `item ID` | The item to drop. Use `0` to represent a meso drop. |
+| `min quantity` | Minimum number of items (or mesos) dropped per roll. |
+| `max quantity` | Maximum number of items (or mesos) dropped per roll. |
+| `probability` | Drop chance as a decimal between `0.0` and `1.0`. A value of `0.4` means a 40% chance. |
+
+### Adding a drop
+
+Open the YAML file for the mob and append a new entry:
+
+```yaml
+rewards:
+  - [ 4000019, 1, 1, 0.400000 ]   # Snail Shell (existing)
+  - [ 2000006, 1, 5, 0.050000 ]   # Power Elixir (new, 5% chance, 1–5 quantity)
+```
+
+Then run `!reloaddrops` in-game to apply the change immediately.
+
+---
+
+## Cash Shop
+
+Cash Shop data is split across two files in `data/cash/`:
+
+- `commodity.yaml` — the full commodity catalogue
+- `modified.yaml` — overrides applied on top of the catalogue
+
+### commodity.yaml
+
+This file defines every commodity the Cash Shop knows about. Each top-level key is the **commodity ID**, and the value is an object with the following fields:
+
+```yaml
+# Brown Flight Headgear
+10000000:
+  itemId: 1002000
+  count: 1
+  price: 300
+  period: 14
+  gender: 2
+  onSale: false
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `itemId` | integer | The item template ID granted to the buyer. |
+| `count` | integer | Number of items in the package. |
+| `price` | integer | NX cost to purchase. |
+| `period` | integer | Duration in days before the item expires. Use `0` for permanent items. |
+| `gender` | integer | Gender restriction: `0` = male, `1` = female, `2` = any. |
+| `onSale` | boolean | Whether the commodity is visible and purchasable in the shop. |
+
+### modified.yaml
+
+`modified.yaml` lets you override individual fields of existing commodity entries without editing the main catalogue. This is the recommended way to toggle items on or off, or to adjust a price, because it keeps your changes separate from the base data.
+
+Each entry uses the same commodity ID as a key and lists only the fields you want to override:
+
+```yaml
+# Paper Boat Hat
+10001062:
+  onSale: true
+
+# Miracle Cube — override price only
+50200211:
+  price: 3000
+
+# Character Name Change — disable
+50600000:
+  onSale: false
+```
+
+When Kinoko loads Cash Shop data it applies `commodity.yaml` first and then merges `modified.yaml` on top, with `modified.yaml` values taking precedence.
+
+### Enabling a commodity
+
+To make a commodity available for purchase:
+
+<Steps>
+  <Step title="Find the commodity ID">
+    Use `!find commodity <id>` in-game to inspect any commodity by ID, or look in `commodity.yaml` for the item you want to enable.
+  </Step>
+  <Step title="Add or update the entry in modified.yaml">
+    Open `data/cash/modified.yaml` and set `onSale: true` for that commodity ID:
+
+    ```yaml
+    # Brown Flight Headgear
+    10000000:
+      onSale: true
+    ```
+  </Step>
+  <Step title="Reload the Cash Shop">
+    Run `!reloadcashshop` (or `!reloadcs`) in-game. Changes take effect immediately.
+  </Step>
+</Steps>
+
+<Tip>
+  Use `!find commodity <id>` in-game to confirm that a loaded commodity has the item ID, price, and period you expect before testing a purchase.
+</Tip>
+
+---
+
+## Hot-reloading data
+
+All three data types can be reloaded on a live server without downtime:
+
+| Command | What it reloads |
+|---|---|
+| `!reloadshops` | All files in `data/shop/` |
+| `!reloaddrops` | All files in `data/reward/` |
+| `!reloadcashshop` / `!reloadcs` | `data/cash/commodity.yaml` and `data/cash/modified.yaml` |
+
+<Warning>
+  Reload commands replace the entire in-memory data set. Any players who are currently interacting with an NPC shop or browsing the Cash Shop will see the updated data the next time they open the relevant UI.
+</Warning>

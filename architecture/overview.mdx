@@ -1,0 +1,81 @@
+---
+title: "Kinoko server architecture and node topology"
+description: "Understand how Kinoko's multi-node design mirrors the original MapleStory server topology, with Login, Central, and Channel nodes each handling a distinct role."
+---
+
+Kinoko uses a multi-node architecture that closely mirrors the original MapleStory server design. Three distinct node types run as separate Netty servers within a single JVM process, each responsible for a different phase of the player lifecycle. They communicate internally over a dedicated central channel so that world-wide state — guilds, parties, friends, and rank data — stays consistent across all channels without touching the game client directly.
+
+<CardGroup cols={3}>
+  <Card title="Login Server" icon="key" href="/architecture/server-nodes#login-server-node">
+    Authenticates accounts and presents the character selection screen on port 8484
+  </Card>
+  <Card title="Central Server" icon="server" href="/architecture/server-nodes#central-server-node">
+    Coordinates cross-channel features — guild, party, friend, and rank — on port 8282
+  </Card>
+  <Card title="Channel Servers" icon="gamepad" href="/architecture/server-nodes#channel-server-nodes">
+    Host live in-game field state; one server per channel starting at port 8585
+  </Card>
+</CardGroup>
+
+## Node roles
+
+### Login server (port 8484)
+
+The Login Server is the first node a client connects to. It handles account authentication, PIN and secondary password verification, world and channel selection, and character creation and deletion. Once a player selects a character, the Login Server submits a migration request through the Central Server so the destination Channel Server can authenticate the incoming connection.
+
+### Central server (port 8282)
+
+The Central Server is the coordination hub. It holds no game client connections itself; instead, the Login Server and every Channel Server each open an outbound TCP connection to it at startup. Through those connections the Central Server tracks which accounts and characters are online, brokers channel-to-channel migrations, and manages world-wide state for parties, guilds, messengers, and rank tables. The port is configurable via the `CENTRAL_PORT` environment variable.
+
+### Channel servers (ports 8585 and up)
+
+Each channel runs as an independent `ChannelServerNode`. Channel 1 binds to port 8585, channel 2 to 8586, and so on up to `8585 + CHANNEL_COUNT - 1`. A channel server owns its own field storage, instance storage, event manager, and speaker manager. It processes all in-game packets — movement, combat, item drops, NPC interaction — and notifies the Central Server whenever a user connects, updates, or disconnects.
+
+## Startup sequence
+
+`Server.initialize()` runs every phase in strict order. Providers load WZ and data files into memory first; the database connection is established only after that data is available; ranks and scripts build on top of live data; and finally all three node types are submitted to `ServerExecutor` as concurrent service tasks.
+
+<Steps>
+  <Step title="Load providers">
+    Twelve data providers initialize in sequence, each reading from the WZ files or the `data/` directory:
+
+    | Provider | Source |
+    |---|---|
+    | `ItemProvider` | `Character.wz`, `Item.wz` |
+    | `SkillProvider` | `Skill.wz`, `Morph.wz` |
+    | `MapProvider` | `Map.wz` |
+    | `MobProvider` | `Mob.wz` |
+    | `NpcProvider` | `Npc.wz` |
+    | `ReactorProvider` | `Reactor.wz` |
+    | `QuestProvider` | `Quest.wz` |
+    | `StringProvider` | `String.wz` |
+    | `EtcProvider` | `Etc.wz` |
+    | `ShopProvider` | `data/shop` |
+    | `RewardProvider` | `data/reward` |
+    | `CashShop` | `data/cash` |
+
+    A `System.gc()` call follows immediately to release any parse-time garbage before server threads start.
+  </Step>
+  <Step title="Initialize server utilities">
+    `MapleCrypto`, `ServerExecutor` (thread pool), and `CommandProcessor` are set up. `ServerExecutor` creates one `GameExecutor` and one service thread per available CPU core.
+  </Step>
+  <Step title="Connect to the database">
+    `DatabaseManager.initialize()` reads `DATABASE_PROVIDER` and opens a connection to either SQLite or Cassandra. See [Database backends](/architecture/database) for details.
+  </Step>
+  <Step title="Load ranks">
+    `RankManager.initialize()` queries the database to build the initial character ranking tables used by the world UI.
+  </Step>
+  <Step title="Compile scripts">
+    `ScriptDispatcher.initialize()` uses Reflections to scan the `kinoko.script` package and registers all methods annotated with `@Script`. Scripts are ready before any client connects, so the first invocation carries no lookup overhead.
+  </Step>
+  <Step title="Start nodes">
+    `CentralServerNode`, one `ChannelServerNode` per channel, and `LoginServerNode` are each submitted to `ServerExecutor.submitService()`. The Central Server starts first and waits until all child nodes have registered before signalling the Login Server to accept clients.
+  </Step>
+  <Step title="Register shutdown hook">
+    A JVM shutdown hook is installed that calls `Server.shutdown()`, which stops the Central Server (and cascades a shutdown request to all child nodes), shuts down `ScriptDispatcher`, `RankManager`, `ServerExecutor`, `DatabaseManager`, and finally the Log4j2 log manager.
+  </Step>
+</Steps>
+
+<Note>
+  `ScriptDispatcher.initialize()` scans and registers every `@Script`-annotated method at startup rather than lazily on first use. This guarantees no lookup delay when a player triggers a script for the first time.
+</Note>

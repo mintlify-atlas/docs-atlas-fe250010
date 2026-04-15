@@ -1,0 +1,200 @@
+---
+title: "Quest system and NPC script engine"
+description: "Kinoko's scripting engine powers every NPC interaction, portal warp, quest event, and field trigger — implemented as annotated Java methods loaded at startup."
+---
+
+The scripting engine is the backbone of interactive content in Kinoko. Every time you talk to an NPC, walk through a scripted portal, trigger a reactor, or enter a field with a custom event, the engine resolves a script name, locates the registered Java handler method, and executes it on a virtual thread. Scripts are Java methods annotated with `@Script` in the `kinoko.script` package — not external script files. Quests build on the same system: quest start and completion dialogs are script invocations with a naming convention that ties them to a quest ID.
+
+## Quest system
+
+Kinoko tracks each quest as a `QuestRecord` held in the player's `QuestManager`. A record stores the quest ID, current state, an optional string value (used for progress tracking), and a completion timestamp.
+
+### Quest states
+
+| State | Value | Meaning |
+|---|---|---|
+| `NONE` | 0 | Quest has not been interacted with |
+| `PERFORM` | 1 | Quest is in progress (started) |
+| `COMPLETE` | 2 | Quest has been finished |
+| `PARTYQUEST` | 3 | Quest is tracked as a party/expedition quest (ex-quest) |
+| `NO` | 4 | Quest is explicitly unavailable |
+
+### Quest request types
+
+Client-to-server quest requests are classified by `QuestRequestType`:
+
+| Request | Value | Description |
+|---|---|---|
+| `LostItem` | 0 | Player lost a required item |
+| `AcceptQuest` | 1 | Player accepts the quest |
+| `CompleteQuest` | 2 | Player turns in the quest |
+| `ResignQuest` | 3 | Player abandons the quest |
+| `OpeningScript` | 4 | Run the quest's start script |
+| `CompleteScript` | 5 | Run the quest's completion script |
+
+### How quest flow works
+
+<Steps>
+  <Step title="Player interacts with an NPC or object">
+    The client sends an `AcceptQuest` or `OpeningScript` request with the quest ID.
+  </Step>
+  <Step title="Server creates or retrieves the QuestRecord">
+    `QuestManager.forceStartQuest(questId)` creates a new `QuestRecord`, sets its state to `PERFORM`, and stores it in the player's quest map.
+  </Step>
+  <Step title="Script runs (if configured)">
+    If the quest has a script, `ScriptDispatcher.startQuestScript` is called with `isStart = true`, which resolves the script name `q{questId}s` and runs the handler.
+  </Step>
+  <Step title="Player fulfills requirements">
+    Progress can be stored as a string value on the `QuestRecord` via `setQuestInfoEx`. `QuestManager.hasQuestStarted(questId)` returns `true` while the quest is in `PERFORM` state.
+  </Step>
+  <Step title="Player completes the quest">
+    A `CompleteQuest` or `CompleteScript` request triggers `forceCompleteQuest(questId)`, which sets the state to `COMPLETE` and stamps the completion time. The completion script (`q{questId}e`) runs if present.
+  </Step>
+</Steps>
+
+<Tip>
+  Title quests are identified by `EtcProvider.isTitleQuest` and are filtered from `QuestManager.getTitleQuests()`. Party quests use the `PARTYQUEST` state and are accessible via `getExQuests()`.
+</Tip>
+
+---
+
+## Scripting engine
+
+### How scripts are loaded
+
+At server startup, `ScriptDispatcher.initialize()` uses Reflections to scan the entire `kinoko.script` package. Every class that extends `ScriptHandler` is inspected for methods annotated with `@Script("name")`. Each annotated method must accept exactly one parameter of type `ScriptManager`. Duplicate script names cause a hard startup failure.
+
+```java
+// Example script handler registration
+@Script("guildHQ")
+public static void guildHQScript(ScriptManager sm) {
+    // ...
+}
+```
+
+Scripts are stored in a flat `Map<String, Method>` keyed by the script name string.
+
+### Script types
+
+`ScriptType` classifies each invocation so the engine can apply the correct cleanup behavior after execution:
+
+| Type | Description |
+|---|---|
+| `NPC` | NPC dialog interaction |
+| `ITEM` | Use-triggered item script |
+| `QUEST` | Quest start or completion script |
+| `PORTAL` | Scripted portal warp |
+| `REACTOR` | Reactor activation script |
+| `FIRST_USER_ENTER` | Runs once when the first player enters a field |
+| `USER_ENTER` | Runs each time any player enters a field |
+
+### Script execution model
+
+Scripts run on virtual threads via `Executors.newVirtualThreadPerTaskExecutor()`. The field lock is acquired before the handler is invoked and released in the `finally` block, ensuring thread-safe access to field state. If the user already has an open dialog when a new script is triggered, the incoming script is discarded and the existing dialog is disposed.
+
+```java
+// Simplified execution flow
+scriptExecutor.submit(() -> {
+    ServerExecutor.lockExecutor(field);
+    handler.invoke(null, scriptManager);   // runs on virtual thread
+    ServerExecutor.unlockExecutor(field);
+    disposeScript(scriptType, user, source);
+});
+```
+
+### How an NPC interaction flows
+
+<Steps>
+  <Step title="Client sends NPC talk packet">
+    The packet includes the NPC template ID and the NPC's field object reference.
+  </Step>
+  <Step title="Server resolves the script name">
+    The NPC template ID is mapped to a script name (typically via the NPC's `scriptName` field from `NpcTemplate`). `ScriptDispatcher.startNpcScript` is called with the resolved name and speaker ID.
+  </Step>
+  <Step title="Engine looks up the handler">
+    `scriptMap.get(scriptName)` retrieves the registered `Method`. If no handler is found, an error is logged and the user's client is disposed cleanly.
+  </Step>
+  <Step title="ScriptManagerImpl is instantiated">
+    A `ScriptManagerImpl` is created wrapping the `User`, the current `Field`, the source `FieldObject`, the script name, and the speaker ID. This object is the sole argument passed to the handler.
+  </Step>
+  <Step title="Handler executes on a virtual thread">
+    The method is invoked reflectively. The handler calls `ScriptManager` methods (e.g., `sendNext`, `sendSimple`, `warp`) which block the virtual thread using structured concurrency until the player responds.
+  </Step>
+  <Step title="Script terminates">
+    When the handler returns (or throws `ScriptTermination`), the field lock is released and `disposeScript` is called. For NPC scripts the client is not explicitly disposed — the dialog close is handled by the final packet.
+  </Step>
+</Steps>
+
+### Quest script naming convention
+
+Quest scripts follow a fixed naming pattern derived from the quest ID:
+
+| Script | Name pattern | Example (quest 1000) |
+|---|---|---|
+| Start script | `q{questId}s` | `q1000s` |
+| End/complete script | `q{questId}e` | `q1000e` |
+
+This is assembled in `ScriptDispatcher.startQuestScript`:
+
+```java
+final String scriptName = String.format("q%d%s", questId, isStart ? "s" : "e");
+```
+
+---
+
+## Script package layout
+
+Scripts are organized into packages under `kinoko.script`:
+
+<AccordionGroup>
+  <Accordion title="common/">
+    Core scripting infrastructure: `ScriptDispatcher`, `ScriptManager`, `ScriptManagerImpl`, `ScriptHandler`, `Script` annotation, `ScriptType`, `ScriptMemory`, and message/answer types. You extend `ScriptHandler` and annotate methods with `@Script` to register new scripts.
+  </Accordion>
+  <Accordion title="continent/">
+    NPC and portal scripts scoped to specific continents and regions:
+    - `ContiMove.java` — Continental ship and inter-continent travel routes (Orbis, Ellinia, Leafre, Ereve, etc.)
+    - `VictoriaIsland.java` — Henesys, Ellinia, Perion, Kerning City, Lith Harbor
+    - `LudusLake.java` — Ludibrium, Omega Sector
+    - `ElNathMts.java` — El Nath, Orbis
+    - `NihalDesert.java` — Magatia, Ariant
+    - `MuLungGarden.java` — Mu Lung, Herb Town
+    - `MinarForest.java` — Leafre, Ereve
+    - `GoldenTemple.java` — Golden Temple
+    - `Masteria.java` — Masteria (New Leaf City)
+    - `Edelstein.java` — Edelstein (Resistance home town)
+    - `WorldTour.java` — Zipangu, Aqua Road, and other world tour maps
+  </Accordion>
+  <Accordion title="event/">
+    Scripts for time-limited or instance-based events:
+    - `MiniDungeon.java` — Mini dungeon entry and management
+    - `Wedding.java` — Wedding ceremony event
+  </Accordion>
+  <Accordion title="party/">
+    Party quest (PQ) scripts:
+    - `HenesysPQ.java` — Henesys Party Quest (HPQ)
+    - `KerningPQ.java` — Kerning City Party Quest (KPQ)
+  </Accordion>
+  <Accordion title="quest/">
+    Quest-specific scripted sequences, organized by branch and content area:
+    - `ExplorerTutorial.java` / `ExplorerQuest.java`
+    - `CygnusTutorial.java` / `CygnusQuest.java`
+    - `AranTutorial.java` / `AranQuest.java`
+    - `EvanTutorial.java` / `EvanQuest.java`
+    - `ResistanceTutorial.java` / `ResistanceQuest.java`
+    - `MushroomCastle.java` — Mushroom Castle quest chain
+    - `NeoCity.java` — Neo City quest chain
+    - `TitleQuest.java` — Title achievement quests
+  </Accordion>
+  <Accordion title="Standalone scripts">
+    Top-level script files for special in-game locations and systems:
+    - `FreeMarket.java` — Free Market entrance NPC
+    - `GuildHQ.java` — Guild Headquarters NPC interactions
+    - `StyleFace.java` / `StyleHair.java` — Plastic Surgery NPCs
+    - `UnityPortal.java` — Cross-world portal system
+    - `Consume.java` — Consumable item scripts
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  The `ContiMove` script handles all continental ship routes including the Orbis–Ellinia route, Orbis–Leafre, Orbis–Ereve, and similar inter-regional travel. Airplane, submarine, and elevator/subway transitions use portal scripts in the relevant continent packages.
+</Note>

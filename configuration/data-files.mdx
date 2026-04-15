@@ -1,0 +1,120 @@
+---
+title: "Shop, drop, and Cash Shop YAML file formats"
+description: "Reference for the YAML data files in the data/ directory: NPC shop format, mob drop reward format, and Cash Shop commodity and modified file structure."
+---
+
+The `data/` directory contains YAML files that define NPC shop inventories, mob drop tables, and the Cash Shop catalog. Because these files are read at runtime (and can be reloaded without a restart), they are the primary way to customize loot and economy on your server. The path to this directory is controlled by the `DATA_DIRECTORY` environment variable.
+
+## NPC shop files
+
+Shop files live under `data/shop/` and follow the naming convention `<npcTemplateId>.yaml`. When a player opens a shop NPC, the server looks up that NPC's template ID and loads the matching file.
+
+Each file contains an `items` list. Every entry is a two-element array: `[itemId, price]`. An optional `recharge` flag enables rechargeable items (arrows, stars, bullets) for that shop.
+
+```yaml
+# Silver : Weapon Seller (1001000) - Lith Harbor : Lith Harbor Weapon Store
+
+recharge: true
+items:
+  - [ 1302000, 50 ]    # Sword
+  - [ 1302007, 3000 ]  # Long Sword
+  - [ 1312000, 3000 ]  # Double Axe
+  - [ 1312004, 50 ]    # Hand Axe
+  - [ 1322005, 50 ]    # Wooden Club
+  - [ 1332007, 1000 ]  # Fruit Knife
+```
+
+| Field      | Description                                                               |
+|------------|---------------------------------------------------------------------------|
+| `recharge` | Optional. When `true`, the shop supports rechargeable items (arrows, etc). |
+| `itemId`   | The WZ item template ID of the item being sold.                           |
+| `price`    | The meso cost a player pays to buy one of this item.                      |
+
+To add an item to a shop, append a new `[ itemId, price ]` line to the `items` list. To create a shop for an NPC that has no file yet, create a new file named after that NPC's template ID.
+
+## Drop reward files
+
+Drop files live under `data/reward/` and follow the naming convention `<mobTemplateId>.yaml`. When a mob is killed, the server loads the matching file to roll the drop table.
+
+Each file contains a `rewards` list. Every entry is a four-element array: `[itemId, minQuantity, maxQuantity, dropChance]`. An `itemId` of `0` represents a meso drop.
+
+```yaml
+# Snail (100000)
+
+rewards:
+  - [ 0, 1, 1, 0.600000 ]              # Mesos (60% chance)
+  - [ 2000000, 1, 1, 0.010000 ]        # Red Potion (1% chance)
+  - [ 4000019, 1, 1, 0.400000 ]        # Snail Shell (40% chance)
+  - [ 4010000, 1, 1, 0.002000 ]        # Bronze Ore (0.2% chance)
+  - [ 1002067, 1, 1, 0.000100 ]        # Green Headband (0.01% chance)
+```
+
+| Field         | Description                                                                                  |
+|---------------|----------------------------------------------------------------------------------------------|
+| `itemId`      | Item template ID. Use `0` for a meso drop.                                                   |
+| `minQuantity` | Minimum number of items (or mesos) dropped when this entry triggers.                         |
+| `maxQuantity` | Maximum number of items (or mesos) dropped. The server picks a random value in this range.   |
+| `dropChance`  | Probability between `0.0` (never) and `1.0` (always) that this entry drops.                 |
+
+Boss mobs can have multiple entries for the same item at different probabilities to simulate tiered drop guarantees:
+
+```yaml
+# Horntail (8810018)
+
+rewards:
+  - [ 1122000, 1, 1, 1.000000 ] # Horntail Necklace (guaranteed)
+  - [ 1122000, 1, 1, 0.700000 ] # Horntail Necklace (70% extra)
+  - [ 1122000, 1, 1, 0.300000 ] # Horntail Necklace (30% extra)
+```
+
+## Cash Shop files
+
+Cash Shop data lives under `data/cash/` and is split across two files.
+
+### commodity.yaml
+
+`commodity.yaml` is the master catalog. Each top-level key is a commodity ID, and the fields beneath it describe the item and its sale terms.
+
+```yaml
+# Brown Flight Headgear
+10000000:
+  itemId: 1002000
+  count: 1
+  price: 300
+  period: 14
+  gender: 2
+  onSale: false
+```
+
+| Field    | Description                                                                            |
+|----------|----------------------------------------------------------------------------------------|
+| `itemId` | The WZ item template ID this commodity grants.                                         |
+| `count`  | How many of the item the player receives per purchase.                                 |
+| `price`  | NX cost in the Cash Shop.                                                              |
+| `period` | Duration in days before the item expires. Use `0` for permanent items.                |
+| `gender` | Gender restriction. `0` = male, `1` = female, `2` = unisex.                           |
+| `onSale` | When `true`, the item is visible and purchasable in the Cash Shop.                     |
+
+### modified.yaml
+
+`modified.yaml` lets you override individual fields from `commodity.yaml` without editing the master catalog. Each top-level key matches a commodity ID in `commodity.yaml`, and only the fields you list are overridden.
+
+```yaml
+# Paper Boat Hat — enable for sale
+10001062:
+  onSale: true
+
+# Bronze Sack of Mesos — disable
+10100977:
+  onSale: false
+```
+
+This is the recommended way to enable or disable specific Cash Shop items, because your changes stay isolated and are easy to review.
+
+<Tip>
+  You can reload all three data types at runtime without restarting the server. In-game, use the following admin commands (the prefix depends on your `COMMAND_PREFIX` setting):
+
+  - `!reloadshops` — reloads all files under `data/shop/`
+  - `!reloaddrops` — reloads all files under `data/reward/`
+  - `!reloadcashshop` — reloads `data/cash/commodity.yaml` and `data/cash/modified.yaml`
+</Tip>

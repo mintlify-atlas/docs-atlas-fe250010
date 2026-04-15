@@ -1,0 +1,107 @@
+---
+title: 'Deploy Kinoko with Docker Compose'
+description: 'Run the Kinoko MapleStory v95 server emulator in Docker using the default SQLite setup or the Cassandra variant for persistent clustered storage.'
+---
+
+Docker is the fastest way to get Kinoko running without installing Java or Maven on your host. The repository ships two Compose files: the default `docker-compose.yml` uses SQLite and requires no external services, while `docker-compose.cassandra.yml` adds a Cassandra container for deployments that need a networked database. Both options are covered below.
+
+<Warning>
+  WZ files must be placed in the `./wz/` directory before you start the containers. The server will fail to start if any of the required WZ files are missing. See [Get started with Kinoko](/quickstart#place-wz-files-in-the-wz-directory) for the full list of required files.
+</Warning>
+
+<Tabs>
+  <Tab title="SQLite (default)">
+    The default Compose file builds the server image locally and starts a single container backed by SQLite. No additional services are needed.
+
+    ```bash
+    docker compose up -d
+    ```
+
+    Docker builds the image from the `Dockerfile` on first run, which may take a few minutes. Subsequent starts reuse the cached image.
+
+    To follow the server logs:
+
+    ```bash
+    docker compose logs -f server
+    ```
+
+    To stop the server:
+
+    ```bash
+    docker compose down
+    ```
+  </Tab>
+  <Tab title="With Cassandra">
+    The Cassandra Compose file starts both the server and a `cassandra:5.0.0-jammy` database container. The server waits for the database health check to pass before initializing.
+
+    ```bash
+    docker compose -f docker-compose.cassandra.yml up -d
+    ```
+
+    The Cassandra container exposes port `9042` on the host. The server connects to it using the service name `database` as the host, resolved automatically within the Docker network.
+
+    To follow logs for both services:
+
+    ```bash
+    docker compose -f docker-compose.cassandra.yml logs -f
+    ```
+
+    To stop all services:
+
+    ```bash
+    docker compose -f docker-compose.cassandra.yml down
+    ```
+
+    <Tip>
+      You can also use ScyllaDB as a drop-in replacement for Cassandra. Start it manually with `docker run -d -p 9042:9042 scylladb/scylla --smp 1` and set `DATABASE_HOST` to point at your ScyllaDB host.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Volume mounts
+
+Both Compose files mount two host directories into the container. Create these directories before running `docker compose up`.
+
+| Host path | Container path | Purpose |
+| --- | --- | --- |
+| `./wz` | `/kinoko/wz` | WZ game data files (read-only at runtime) |
+| `./data` | `/kinoko/data` | SQLite database file and server data (persisted across restarts) |
+
+## Exposed ports
+
+| Port | Protocol | Description |
+| --- | --- | --- |
+| `8484` | TCP | Login server — clients connect here first |
+| `8585–8989` | TCP | Channel servers — one port per channel (default: 5 channels, ports 8585–8589) |
+
+## Environment variables
+
+All variables are set in the `environment` block of the Compose file. You can override any of them by editing the file or passing `-e VAR=value` to `docker compose run`.
+
+### ServerConstants
+
+These variables control the network topology and database backend.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `CENTRAL_HOST` | `127.0.0.1` | Hostname the internal central node binds to |
+| `CENTRAL_PORT` | `8282` | Port for inter-node communication between the central node and channel/login nodes |
+| `SERVER_HOST` | `127.0.0.1` | Hostname advertised to clients for channel connections |
+| `DATABASE_PROVIDER` | `sqlite` | Database backend: `sqlite` or `cassandra` |
+| `DATABASE_HOST` | `127.0.0.1` | Hostname of the Cassandra/ScyllaDB node (unused when `DATABASE_PROVIDER=sqlite`) |
+
+### ServerConfig
+
+These variables control world configuration, account behavior, and developer options.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `WORLD_ID` | `0` | Numeric world identifier |
+| `WORLD_NAME` | `Kinoko` | Display name shown in the world selection screen |
+| `CHANNEL_COUNT` | `5` | Number of channel server nodes to start |
+| `AUTO_CREATE_ACCOUNT` | `true` | Automatically create an account on first login if one does not exist |
+| `REQUIRE_SECONDARY_PASSWORD` | `true` | Require a PIC (secondary password) at login |
+| `WZ_DIRECTORY` | `/kinoko/wz` | Path inside the container where WZ files are read from |
+| `DATA_DIRECTORY` | `/kinoko/data` | Path inside the container where the database and data files are stored |
+| `COMMAND_PREFIX` | `!` | In-game chat prefix for GM commands |
+| `DEBUG_MODE` | `true` | Enable verbose debug logging |

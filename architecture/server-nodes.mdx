@@ -1,0 +1,114 @@
+---
+title: "Login, Central, and Channel server nodes"
+description: "Each Kinoko node runs as a separate Netty server handling a distinct phase of the player lifecycle. Covers Login, Central, and Channel node internals."
+---
+
+Each node type in Kinoko runs as a separate Netty server, handling a distinct phase of the player lifecycle. The `Node` base class provides the NIO event-loop groups and `startServer`/`startClient` helpers that every node uses to bind a port or open an outbound TCP connection. `ServerNode` extends `Node` with a `ClientStorage` map, a request-ID counter, and a `CompletableFuture`-based shutdown barrier shared by both `LoginServerNode` and `ChannelServerNode`.
+
+## Login server node
+
+`LoginServerNode` binds to port **8484** and is the entry point for all game clients. It runs two Netty pipelines simultaneously:
+
+- **Login server** — accepts inbound MapleStory client connections, processed by `LoginPacketHandler`
+- **Central client** — an outbound connection to the Central Server, processed by `LoginServerHandler`
+
+When a player authenticates and selects a character, `LoginServerNode` calls `submitLoginRequest()`, which serializes a `MigrationInfo` object and sends it to the Central Server over the central client channel. The Central Server stores the pending migration and replies with a `TransferInfo` that contains the target channel's host and port. The client is then redirected to the appropriate Channel Server.
+
+```java
+// LoginServerNode.java
+loginServerFuture = startServer(
+        new PacketChannelInitializer(new LoginPacketHandler(), self),
+        port  // 8484
+);
+
+centralClientFuture = startClient(new ChannelInitializer<>() { ... },
+        InetAddress.getByAddress(ServerConstants.CENTRAL_HOST),
+        ServerConstants.CENTRAL_PORT  // 8282
+);
+```
+
+The Login Server also tracks available channel information. It receives a `ChannelInfo` list from the Central Server once all Channel Servers have registered, and uses that list to render the channel-select screen.
+
+## Central server node
+
+`CentralServerNode` binds to port **8282** (`CENTRAL_PORT`) and acts as the coordination hub. It accepts inbound connections from the Login Server and all Channel Servers — it never connects outward. The central pipeline uses its own `CentralPacketDecoder` / `CentralPacketEncoder` pair and `CentralServerHandler` to route messages.
+
+The Central Server holds six in-memory stores:
+
+| Store | Purpose |
+|---|---|
+| `ServerStorage` | Tracks registered `RemoteServerNode` handles for Login and Channel nodes |
+| `MigrationStorage` | Holds pending `MigrationInfo` objects during channel transfers |
+| `UserStorage` | Maps character IDs and names to `RemoteUser` snapshots for online players |
+| `MessengerStorage` | Manages active messenger groups |
+| `PartyStorage` | Manages active party groups |
+| `GuildStorage` | Manages active guild objects in memory |
+
+The Central Server uses a `CompletableFuture` (`initializeFuture`) to gate startup: `addServerNode()` is called each time a child node registers, and once `ServerStorage.isFull()` is true (all channels plus Login have connected), the future completes and the Central Server sends `CentralPacket.initializeComplete()` to the Login Server, allowing it to accept clients.
+
+```java
+// CentralServerNode.java — startup gate
+public synchronized void addServerNode(RemoteServerNode serverNode) {
+    serverStorage.addServerNode(serverNode);
+    if (serverStorage.isFull()) {
+        initializeFuture.complete(null);
+    }
+}
+```
+
+## Channel server nodes
+
+A `ChannelServerNode` is created for each channel ID in `0 .. CHANNELS_PER_WORLD - 1`. Channel `n` binds to port `8585 + n`, so the default five-channel configuration uses ports 8585–8589. Like the Login Server, each Channel Server runs two pipelines:
+
+- **Channel server** — accepts inbound game client connections, processed by `ChannelPacketHandler`
+- **Central client** — an outbound connection to the Central Server, processed by `ChannelServerHandler`
+
+Each channel server manages:
+
+| Component | Role |
+|---|---|
+| `ChannelFieldStorage` | Lazy-loaded map fields for this channel |
+| `InstanceStorage` | Instanced dungeon/party quest maps |
+| `EventManager` | Scheduled world events (Zakum, PQ timers, etc.) |
+| `SpeakerManager` | Avatar and world-speaker message cooldowns |
+
+When a user enters or leaves a field, the channel sends `userConnect` / `userDisconnect` notifications to the Central Server. Cross-channel features — party requests, guild requests, broadcast packets, and user queries — are all sent as `CentralPacket` messages over the central client connection rather than through any shared memory.
+
+```java
+// ChannelServerNode.java — channel port assignment
+// From Server.java:
+// new ChannelServerNode(channelId, ServerConstants.CHANNEL_PORT + channelId)
+// CHANNEL_PORT = 8585
+
+log.info("Channel {} listening on port {}", channelId + 1, channelPort);
+```
+
+## ServerExecutor thread pool
+
+`ServerExecutor` initializes two executor services at JVM startup:
+
+- **`serviceExecutor`** — a fixed thread pool with one thread per CPU core, used to run each node's `initialize()` method concurrently and to handle tasks that are not yet bound to a field (e.g., login flow, database reads)
+- **`gameExecutors`** — one `GameExecutor` per CPU core; each field is pinned to an executor by its executor index, so all state mutations on a field are single-threaded and require no further synchronization
+
+Scheduling uses a single-threaded `ScheduledExecutorService` that dispatches delayed tasks back onto the appropriate game or service executor.
+
+## Configuring the channel count
+
+The number of Channel Server instances is controlled by the `CHANNEL_COUNT` environment variable, which maps to `ServerConfig.CHANNELS_PER_WORLD` (default: **5**).
+
+```bash
+# .env or docker-compose.yml
+CHANNEL_COUNT=3
+```
+
+```yaml
+# docker-compose.yml excerpt
+environment:
+  CHANNEL_COUNT: "5"
+```
+
+Ports 8585 through `8585 + CHANNEL_COUNT - 1` must all be reachable from clients. The default Docker Compose file exposes the range `8585-8989` to accommodate up to 405 channels.
+
+<Note>
+  A JVM shutdown hook calls `Server.shutdown()`, which sends `CentralPacket.shutdownRequest()` to every registered child node before closing the Central Server socket. Each `ChannelServerNode` and `LoginServerNode` closes active client connections, waits up to `SHUTDOWN_TIMEOUT` seconds (default: 30) for them to drain, then acknowledges the shutdown via `CentralPacket.shutdownResult()`. This ensures in-flight database writes complete before the process exits.
+</Note>
